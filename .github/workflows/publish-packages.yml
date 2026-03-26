@@ -1,0 +1,204 @@
+name: Publish Packages
+
+# ============================================================================
+# Publishes Docker images and binaries to GitHub Packages
+# Triggered on releases or manual dispatch
+# ============================================================================
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish'
+        required: true
+        default: 'latest'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  GO_VERSION: '1.22'
+  NODE_VERSION: '20'
+
+jobs:
+  publish-go-binaries:
+    name: Publish Go Binaries
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        service: [api-gateway, auth-service, task-service]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION=${{ github.event.release.tag_name }}
+          else
+            VERSION=${{ github.event.inputs.version }}
+          fi
+          echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Build ${{ matrix.service }}
+        run: |
+          mkdir -p ./bin
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -ldflags "-X main.Version=${{ steps.version.outputs.version }} -X main.BuildTime=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+            -o ./bin/${{ matrix.service }} \
+            ./cmd/${{ matrix.service }}/main.go
+
+      - name: Upload binaries to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./bin/${{ matrix.service }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-docker-images:
+    name: Publish Docker Images
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        service: [api-gateway, auth-service, task-service]
+        include:
+          - service: api-gateway
+            dockerfile: api-gateway.Dockerfile
+          - service: auth-service
+            dockerfile: auth-service.Dockerfile
+          - service: task-service
+            dockerfile: task-service.Dockerfile
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION=${{ github.event.release.tag_name }}
+          else
+            VERSION=${{ github.event.inputs.version }}
+          fi
+          echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }}
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./deployments/docker/${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  publish-npm-package:
+    name: Publish Frontend Package
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+          registry-url: 'https://npm.pkg.github.com'
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION=${{ github.event.release.tag_name }}
+          else
+            VERSION=${{ github.event.inputs.version }}
+          fi
+          echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Update package version
+        working-directory: ./frontend
+        run: |
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build package
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Publish to GitHub Packages
+        working-directory: ./frontend
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  notify-publish:
+    name: Notify Publishing
+    needs: [publish-go-binaries, publish-docker-images, publish-npm-package]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Check publish status
+        run: |
+          if [ "${{ needs.publish-go-binaries.result }}" = "success" ] && \
+             [ "${{ needs.publish-docker-images.result }}" = "success" ] && \
+             [ "${{ needs.publish-npm-package.result }}" = "success" ]; then
+            echo "✅ All packages published successfully"
+          else
+            echo "⚠️ Some packages failed to publish"
+            exit 1
+          fi
+
+      - name: Create deployment status
+        if: github.event_name == 'release'
+        run: |
+          echo "📦 Release ${{ github.event.release.tag_name }} has been published"
+          echo "   - Docker images: ${{ env.REGISTRY }}/${{ github.repository }}/[service]:${{ github.event.release.tag_name }}"
+          echo "   - Binaries available in release assets"
+
