@@ -1,0 +1,27 @@
+# IDE
+.idea/
+*.iml
+*.iws
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Go
+bin/
+*.test
+*.out
+coverage.out
+
+# Logs
+*.log
+logs/
+
+# Docker overrides
+*.override.yml
