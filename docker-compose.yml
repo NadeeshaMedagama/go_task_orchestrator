@@ -1,0 +1,68 @@
+services:
+  # ── API Gateway ───────────────────────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: .
+      dockerfile: deployments/docker/api-gateway.Dockerfile
+    container_name: go_task_orchestrator_gateway
+    restart: unless-stopped
+    depends_on:
+      - auth-service
+      - task-service
+    environment:
+      PORT: 8080
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      AUTH_SERVICE_URL: http://auth-service:8081
+      TASK_SERVICE_URL: http://task-service:8082
+    ports:
+      - "8080:8080"
+    networks:
+      - orchestrator-net
+
+  # ── Auth Service ─────────────────────────────────────────────────────────────
+  auth-service:
+    build:
+      context: .
+      dockerfile: deployments/docker/auth-service.Dockerfile
+    container_name: go_task_orchestrator_auth
+    restart: unless-stopped
+    environment:
+      PORT: 8081
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    networks:
+      - orchestrator-net
+
+  # ── Task Service ─────────────────────────────────────────────────────────────
+  task-service:
+    build:
+      context: .
+      dockerfile: deployments/docker/task-service.Dockerfile
+    container_name: go_task_orchestrator_task
+    restart: unless-stopped
+    environment:
+      PORT: 8082
+    networks:
+      - orchestrator-net
+
+  # ── Frontend (Next.js) ─────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: go_task_orchestrator_frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://api-gateway:8080/api
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
+    networks:
+      - orchestrator-net
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  orchestrator-net:
+    driver: bridge
+
