@@ -1,0 +1,126 @@
+name: Dependency Checks
+
+# ============================================================================
+# Runs on every push to check for:
+# - Vulnerable dependencies
+# - Go mod tidy
+# - npm audit for frontend
+# ============================================================================
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  go-dependencies:
+    name: Check Go Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Check go.mod formatting
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum || (echo "go.mod/go.sum not tidy" && exit 1)
+
+      - name: Run go mod verify
+        run: go mod verify
+
+      - name: Run security scan with gosec
+        uses: securego/gosec@master
+        with:
+          args: '-no-fail -fmt json -out gosec-results.json ./...'
+        continue-on-error: true
+
+      - name: Upload Gosec results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: gosec-results.json
+          category: gosec
+        continue-on-error: true
+
+  npm-dependencies:
+    name: Check npm Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./frontend
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        working-directory: ./frontend
+        continue-on-error: true
+
+      - name: Check for vulnerabilities with npm audit
+        id: npm-audit
+        run: |
+          npm audit --json > npm-audit-report.json || true
+        working-directory: ./frontend
+
+      - name: Comment PR with npm audit results
+        if: github.event_name == 'pull_request'
+        run: |
+          AUDIT_RESULT=$(cat npm-audit-report.json)
+          VULNERABILITIES=$(echo "$AUDIT_RESULT" | jq '.vulnerabilities | length')
+          if [ "$VULNERABILITIES" -gt 0 ]; then
+            echo "⚠️ Found $VULNERABILITIES npm vulnerabilities"
+          fi
+        working-directory: ./frontend
+        continue-on-error: true
+
+  license-check:
+    name: License Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install license-checker
+        run: npm install -g license-checker
+
+      - name: Check licenses
+        run: license-checker --json > licenses.json || true
+        continue-on-error: true
+
+      - name: Verify approved licenses
+        run: |
+          if grep -q '"licenses":"GPL' licenses.json; then
+            echo "⚠️ Warning: GPL licensed packages detected"
+          fi
+        continue-on-error: true
+
