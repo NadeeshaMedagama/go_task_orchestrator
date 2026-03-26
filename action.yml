@@ -1,0 +1,65 @@
+# ============================================================================
+# Go_Task_Orchestrator — GitHub Marketplace Action
+# ============================================================================
+# Composite action that deploys the Go_Task_Orchestrator stack.
+# Can be published to the GitHub Marketplace for reuse.
+# ============================================================================
+
+name: "Go_Task_Orchestrator Deploy"
+description: "Deploy the Go_Task_Orchestrator microservices stack (api-gateway, auth-service, task-service) using Docker Compose"
+author: "nadeesha_medagama"
+
+branding:
+  icon: "server"
+  color: "blue"
+
+inputs:
+  jwt-secret:
+    description: "JWT signing secret shared across gateway and auth-service"
+    required: true
+  gateway-port:
+    description: "Port to expose the API gateway"
+    required: false
+    default: "8080"
+
+outputs:
+  gateway-url:
+    description: "URL of the running API gateway"
+    value: ${{ steps.deploy.outputs.gateway-url }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        echo "Validating inputs..."
+        if [ -z "${{ inputs.jwt-secret }}" ]; then
+          echo "ERROR: jwt-secret is required"
+          exit 1
+        fi
+        echo "All inputs valid"
+
+    - name: Set up environment
+      shell: bash
+      run: |
+        cat > .env <<EOF
+        JWT_SECRET=${{ inputs.jwt-secret }}
+        EOF
+        echo "Environment file created"
+
+    - name: Deploy with Docker Compose
+      id: deploy
+      shell: bash
+      run: |
+        echo "Starting Go_Task_Orchestrator..."
+        docker compose up -d --build
+        echo ""
+        echo "Waiting for services to become healthy..."
+        sleep 15
+        docker compose ps
+        echo ""
+        echo "gateway-url=http://localhost:${{ inputs.gateway-port }}/api" >> "$GITHUB_OUTPUT"
+        echo ""
+        echo "Go_Task_Orchestrator is running"
+        echo "   Gateway:   http://localhost:${{ inputs.gateway-port }}/api"
