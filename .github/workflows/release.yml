@@ -175,6 +175,7 @@ jobs:
           name: ${{ matrix.service }}-builds
           path: ./dist/release/
           retention-days: 1
+          overwrite: true
 
   generate-changelog:
     name: Generate Changelog
