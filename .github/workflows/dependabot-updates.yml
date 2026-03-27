@@ -10,12 +10,17 @@ on:
     inputs:
       pr_url:
         description: "Dependabot PR URL"
-        required: false
+        required: true
         type: string
       update_type:
         description: "Update type (version-update:semver-patch|minor|major)"
         required: true
         type: string
+      validate_author:
+        description: "Validate PR author is dependabot[bot]"
+        required: false
+        default: true
+        type: boolean
   pull_request_target:
     types: [opened, reopened, synchronize]
 
@@ -39,7 +44,7 @@ jobs:
         run: echo "PR_URL=${{ inputs.pr_url }}" >> "$GITHUB_ENV"
 
       - name: Validate PR author for manual runs
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.validate_author
         run: |
           author="$(gh pr view "$PR_URL" --json author --jq '.author.login')"
           if [ "$author" != "dependabot[bot]" ]; then
@@ -47,7 +52,8 @@ jobs:
             exit 1
           fi
         env:
-          GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVER_TOKEN }}
+          PR_URL: ${{ inputs.pr_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Dependabot metadata
         id: dependabot-metadata
