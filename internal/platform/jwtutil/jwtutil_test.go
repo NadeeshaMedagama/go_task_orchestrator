@@ -24,4 +24,3 @@ func TestGenerateAndParseToken(t *testing.T) {
 		t.Fatalf("expected role USER, got %s", claims.Role)
 	}
 }
-
