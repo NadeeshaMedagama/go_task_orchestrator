@@ -6,7 +6,7 @@ name: Dependabot Updates Handler
 # ============================================================================
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize]
 
 permissions:
@@ -17,8 +17,8 @@ permissions:
 jobs:
   dependabot:
     runs-on: ubuntu-latest
-    if: github.actor == 'dependabot[bot]'
-    
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]'
+
     steps:
       - name: Dependabot metadata
         id: dependabot-metadata
@@ -30,13 +30,13 @@ jobs:
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVER_TOKEN }}
 
       - name: Enable auto-merge for patch and minor updates
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVER_TOKEN }}
         if: steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch' || steps.dependabot-metadata.outputs.update-type == 'version-update:semver-minor'
 
       - name: Comment on major version updates
@@ -44,6 +44,5 @@ jobs:
           gh pr comment "$PR_URL" -b "⚠️ **Manual Review Required**: This is a major version update. Please review the changelog and breaking changes before merging."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVER_TOKEN }}
         if: steps.dependabot-metadata.outputs.update-type == 'version-update:semver-major'
-
