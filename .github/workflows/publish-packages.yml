@@ -21,7 +21,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  GO_VERSION: '1.22'
+  GO_VERSION: '1.23'
   NODE_VERSION: '20'
 
 jobs:
