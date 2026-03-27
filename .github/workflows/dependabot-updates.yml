@@ -10,7 +10,7 @@ on:
     inputs:
       pr_url:
         description: "Dependabot PR URL"
-        required: true
+        required: false
         type: string
       update_type:
         description: "Update type (version-update:semver-patch|minor|major)"
