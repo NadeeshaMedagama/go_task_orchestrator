@@ -172,7 +172,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.service }}-builds
+          name: ${{ matrix.service }}-${{ matrix.goos }}-${{ matrix.goarch }}-builds
           path: ./dist/release/
           retention-days: 1
           overwrite: true
