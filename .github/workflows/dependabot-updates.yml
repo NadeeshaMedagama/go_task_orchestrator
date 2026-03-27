@@ -10,11 +10,11 @@ on:
     inputs:
       pr_url:
         description: "Dependabot PR URL"
-        required: true
+        required: false
         type: string
       update_type:
         description: "Update type (version-update:semver-patch|minor|major)"
-        required: true
+        required: false
         type: string
       validate_author:
         description: "Validate PR author is dependabot[bot]"
@@ -40,11 +40,15 @@ jobs:
         run: echo "PR_URL=${{ github.event.pull_request.html_url }}" >> "$GITHUB_ENV"
 
       - name: Set PR URL from input
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_url != ''
         run: echo "PR_URL=${{ inputs.pr_url }}" >> "$GITHUB_ENV"
 
+      - name: Skip manual run without PR URL
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_url == ''
+        run: echo "No pr_url provided; skipping PR actions."
+
       - name: Validate PR author for manual runs
-        if: github.event_name == 'workflow_dispatch' && inputs.validate_author
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_url != '' && inputs.validate_author
         run: |
           author="$(gh pr view "$PR_URL" --json author --jq '.author.login')"
           if [ "$author" != "dependabot[bot]" ]; then
@@ -67,23 +71,24 @@ jobs:
         run: echo "UPDATE_TYPE=${{ steps.dependabot-metadata.outputs.update-type }}" >> "$GITHUB_ENV"
 
       - name: Set update type from input
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_url != ''
         run: echo "UPDATE_TYPE=${{ inputs.update_type }}" >> "$GITHUB_ENV"
 
       - name: Auto approve dependency updates
+        if: github.event_name == 'pull_request_target' || (github.event_name == 'workflow_dispatch' && inputs.pr_url != '')
         run: gh pr review --approve "$PR_URL"
         env:
           GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVER_TOKEN }}
 
       - name: Enable auto-merge for patch and minor updates
+        if: (github.event_name == 'pull_request_target' || (github.event_name == 'workflow_dispatch' && inputs.pr_url != '')) && (env.UPDATE_TYPE == 'version-update:semver-patch' || env.UPDATE_TYPE == 'version-update:semver-minor')
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVER_TOKEN }}
-        if: env.UPDATE_TYPE == 'version-update:semver-patch' || env.UPDATE_TYPE == 'version-update:semver-minor'
 
       - name: Comment on major version updates
+        if: (github.event_name == 'pull_request_target' || (github.event_name == 'workflow_dispatch' && inputs.pr_url != '')) && env.UPDATE_TYPE == 'version-update:semver-major'
         run: |
           gh pr comment "$PR_URL" -b "⚠️ **Manual Review Required**: This is a major version update. Please review the changelog and breaking changes before merging."
         env:
           GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVER_TOKEN }}
-        if: env.UPDATE_TYPE == 'version-update:semver-major'
