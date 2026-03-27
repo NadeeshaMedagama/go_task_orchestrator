@@ -388,4 +388,3 @@ func getenv(key, fallback string) string {
 	}
 	return v
 }
-
