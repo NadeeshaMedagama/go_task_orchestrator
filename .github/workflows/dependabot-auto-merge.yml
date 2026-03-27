@@ -8,7 +8,8 @@
 name: Dependabot Auto-Merge
 
 on:
-  pull_request:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
 
 permissions:
@@ -19,7 +20,7 @@ jobs:
   auto-merge:
     name: Dependabot — Auto-Merge
     runs-on: ubuntu-latest
-    if: github.actor == 'dependabot[bot]'
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]'
 
     steps:
       - name: Fetch Dependabot metadata
@@ -33,14 +34,14 @@ jobs:
         run: gh pr review "$PR_URL" --approve -b "✅ Auto-approved by Dependabot Auto-Merge workflow (semver ${{ steps.metadata.outputs.update-type }})"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVER_TOKEN }}
 
       - name: Enable auto-merge (minor & patch only)
         if: steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch'
         run: gh pr merge "$PR_URL" --auto --squash
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVER_TOKEN }}
 
       - name: Comment on major updates
         if: steps.metadata.outputs.update-type == 'version-update:semver-major'
@@ -48,5 +49,4 @@ jobs:
           gh pr comment "$PR_URL" --body "⚠️ **Major version update detected.** This PR requires manual review before merging."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVER_TOKEN }}
