@@ -200,10 +200,10 @@ jobs:
           else
             CHANGELOG=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"%h - %s (%an)" | grep -v "Merge pull request" | head -50)
           fi
-          
-          # Escape for JSON output
-          CHANGELOG=$(echo "$CHANGELOG" | jq -Rs .)
-          echo "content=${CHANGELOG}" >> $GITHUB_OUTPUT
+
+          echo "content<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
   create-release:
     name: Create GitHub Release
@@ -221,25 +221,38 @@ jobs:
 
       - name: Prepare release notes
         id: prepare-notes
+        env:
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.version }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+          CHANGELOG: ${{ needs.generate-changelog.outputs.changelog }}
+          USER_RELEASE_NOTES: ${{ github.event.inputs['release-notes'] }}
         run: |
-          NOTES="## Release ${{ needs.prepare-release.outputs.version }}\n\n"
-          NOTES="${NOTES}### 📦 Build Artifacts\n"
-          NOTES="${NOTES}- **Docker Images**: \`ghcr.io/${{ github.repository }}/[service]:${{ needs.prepare-release.outputs.tag }}\`\n"
-          NOTES="${NOTES}- **Binaries**: See assets below\n\n"
-          
-          if [ -n "${{ github.event.inputs.release-notes }}" ]; then
-            NOTES="${NOTES}### 📝 Release Notes\n${{ github.event.inputs.release-notes }}\n\n"
-          fi
-          
-          NOTES="${NOTES}### 📋 Recent Changes\n\`\`\`\n${{ needs.generate-changelog.outputs.changelog }}\n\`\`\`\n\n"
-          NOTES="${NOTES}### 🔗 Resources\n"
-          NOTES="${NOTES}- [API Documentation](./docs/API_REFERENCE.md)\n"
-          NOTES="${NOTES}- [Deployment Guide](./docs/DEPLOYMENT.md)\n"
-          NOTES="${NOTES}- [Setup Guide](./docs/SETUP_GUIDE.md)\n"
-          
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "notes<<EOF"
+            echo "## Release ${RELEASE_VERSION}"
+            echo
+            echo "### Build Artifacts"
+            echo "- **Docker Images**: \`ghcr.io/${{ github.repository }}/[service]:${RELEASE_TAG}\`"
+            echo "- **Binaries**: See assets below"
+            echo
+
+            if [ -n "$USER_RELEASE_NOTES" ]; then
+              echo "### Release Notes"
+              echo "$USER_RELEASE_NOTES"
+              echo
+            fi
+
+            echo "### Recent Changes"
+            echo '```'
+            echo "$CHANGELOG"
+            echo '```'
+            echo
+            echo "### Resources"
+            echo "- [API Documentation](./docs/API_REFERENCE.md)"
+            echo "- [Deployment Guide](./docs/DEPLOYMENT.md)"
+            echo "- [Setup Guide](./docs/SETUP_GUIDE.md)"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create release
         uses: softprops/action-gh-release@v1
