@@ -47,4 +47,3 @@ func ParseToken(secret, raw string) (*Claims, error) {
 
 	return claims, nil
 }
-
