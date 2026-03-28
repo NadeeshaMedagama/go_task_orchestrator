@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: go-task-orchestrator-config
+  namespace: go-task-orchestrator
+data:
+  AUTH_SERVICE_URL: "http://auth-service:8081"
+  TASK_SERVICE_URL: "http://task-service:8082"
