@@ -29,6 +29,7 @@ permissions:
   contents: write
   packages: write
   pull-requests: write
+  deployments: write
 
 env:
   GO_VERSION: '1.23'
@@ -292,10 +293,58 @@ jobs:
               }
             })
 
+  deploy-production:
+    name: Deploy to Production Environment
+    runs-on: ubuntu-latest
+    needs: [prepare-release, create-release, publish-release]
+    permissions:
+      contents: read
+      deployments: write
+    concurrency:
+      group: production-deployments
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ steps.deployment-metadata.outputs.url }}
+    outputs:
+      deployment_url: ${{ steps.deployment-metadata.outputs.url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve deployment metadata
+        id: deployment-metadata
+        env:
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+          REPO_PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          if [ -n "$REPO_PRODUCTION_URL" ]; then
+            DEPLOYMENT_URL="$REPO_PRODUCTION_URL"
+          else
+            DEPLOYMENT_URL="https://github.com/${REPOSITORY}/releases/tag/${RELEASE_TAG}"
+          fi
+
+          echo "url=${DEPLOYMENT_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Mark deployment details
+        run: |
+          echo "🚀 Deployment prepared for production environment"
+          echo "Version: ${{ needs.prepare-release.outputs.version }}"
+          echo "Tag: ${{ needs.prepare-release.outputs.tag }}"
+          echo "URL: ${{ steps.deployment-metadata.outputs.url }}"
+
+          echo "## 🚀 Production Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Version**: ${{ needs.prepare-release.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Tag**: ${{ needs.prepare-release.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Environment URL**: ${{ steps.deployment-metadata.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
+
   post-release:
     name: Post-Release Tasks
     runs-on: ubuntu-latest
-    needs: [prepare-release, publish-release]
+    needs: [prepare-release, publish-release, deploy-production]
     if: always()
     
     steps:
@@ -314,4 +363,5 @@ jobs:
           echo "- Docker images pushed to GitHub Container Registry" >> $GITHUB_STEP_SUMMARY
           echo "- Binaries available in release assets" >> $GITHUB_STEP_SUMMARY
           echo "- GitHub release created and published" >> $GITHUB_STEP_SUMMARY
+          echo "- Production deployment recorded: ${{ needs.deploy-production.outputs.deployment_url }}" >> $GITHUB_STEP_SUMMARY
 
