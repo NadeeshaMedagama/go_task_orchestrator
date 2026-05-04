@@ -8,7 +8,7 @@ ARG TARGETARCH
 
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/auth-service ./cmd/auth-service
 
-FROM alpine:3.20
+FROM alpine:3.23
 WORKDIR /app
 COPY --from=builder /out/auth-service /app/auth-service
 EXPOSE 8081
