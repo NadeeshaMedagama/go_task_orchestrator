@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /src
 COPY go.mod ./
 RUN go mod download
@@ -8,7 +8,7 @@ ARG TARGETARCH
 
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/api-gateway ./cmd/api-gateway
 
-FROM alpine:3.20
+FROM alpine:3.23
 WORKDIR /app
 COPY --from=builder /out/api-gateway /app/api-gateway
 EXPOSE 8080
