@@ -14,7 +14,7 @@
     "react-dom": "^19",
     "axios": "^1.16.0",
     "react-hot-toast": "^2.4.1",
-    "lucide-react": "^1.8.0",
+    "lucide-react": "^1.14.0",
     "date-fns": "^4.1.0",
     "@headlessui/react": "^2.2.10"
   },
@@ -25,7 +25,7 @@
     "@types/react-dom": "^19",
     "tailwindcss": "^4.3.0",
     "postcss": "^8",
-    "autoprefixer": "^10.0.1",
+    "autoprefixer": "^10.5.0",
     "eslint": "^10.2.0",
     "eslint-config-next": "16.2.4"
   }
